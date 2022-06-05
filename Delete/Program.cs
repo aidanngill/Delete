@@ -7,12 +7,26 @@ namespace Delete
     {
         static async Task Main(string[] args)
         {
+            var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ramadan", "delete");
+            Directory.CreateDirectory(path);
+
             Log.Logger = new LoggerConfiguration()
                 .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
-                .WriteTo.File("./log.txt", restrictedToMinimumLevel: LogEventLevel.Debug, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+                .WriteTo.File(
+                    Path.Join(path, "log.txt"),
+                    restrictedToMinimumLevel: LogEventLevel.Debug
+                )
                 .CreateLogger();
 
             var script = new Script();
+
+            Console.CancelKeyPress += delegate
+            {
+                if (script.deletedMessageCount > 0)
+                {
+                    Log.Information("Successfully deleted {Amount} messages", script.deletedMessageCount);
+                }
+            };
 
             try
             {
@@ -20,9 +34,6 @@ namespace Delete
             }
             finally
             {
-                // Print out final stats here
-
-
                 Log.CloseAndFlush();
             }
         }

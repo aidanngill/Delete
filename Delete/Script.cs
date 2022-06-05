@@ -13,6 +13,7 @@ namespace Delete
         private readonly List<Guild> guildList = new();
         private readonly Random random = new();
         private int dryRunCount = 0;
+        public int deletedMessageCount = 0;
         private async Task RunAllGuildsOption()
         {
             foreach (var guild in await account.GetGuildsAsync())
@@ -76,17 +77,38 @@ namespace Delete
 
             return 0;
         }
-        private async Task<int?> DeleteFromList(Guild guild)
+        private async Task<int?> DeleteFromList<T>(T value)
         {
-            Log.Information("Started {DeleteOrCount} messages from {Guild}", Util.DeleteOrCount(options.DryRun), guild);
+            Log.Information("Started {DeleteOrCount} messages from {GuildOrChannel}", Util.DeleteOrCount(options.DryRun), value);
 
             Search search;
+
             int? totalAmount = null;
             int deletedAmount = 0;
 
+            if (value is not Channel && value is not Guild)
+            {
+                throw new Exception("Invalid type was provided to the list");
+            }
+
+            Channel channel = value as Channel;
+            Guild guild = value as Guild;
+
+            if (channel is null && guild is null)
+            {
+                throw new Exception("Invalid type was provided to the list");
+            }
+
             do
             {
-                search = await account.SearchMessages(guild, account.User, sortOrder: options.SortOrder);
+                if (guild is not null)
+                {
+                    search = await account.SearchMessages(guild, account.User, sortOrder: options.SortOrder);
+                }
+                else
+                {
+                    search = await account.SearchMessages(channel, account.User, sortOrder: options.SortOrder);
+                }
 
                 if (options.DryRun)
                 {
@@ -100,49 +122,27 @@ namespace Delete
 
                 foreach (Message message in search.Messages)
                 {
+                    if (guild is not null)
+                    {
+                        channel = await account.GetChannelAsync(message.ChannelID);
+                        await account.DeleteMessage(channel, message);
 
-                    Channel channel = await account.GetChannelAsync(message.ChannelID);
-                    await account.DeleteMessage(channel, message);
-                    deletedAmount++;
+                        deletedAmount++;
+                        deletedMessageCount++;
 
-                    Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Guild} ({Channel}): {MessageContent}",
-                        deletedAmount, totalAmount, message.Author, guild, channel, message.Content);
+                        Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Guild} ({Channel}): {MessageContent}",
+                            deletedAmount, totalAmount, message.Author, guild, channel, message.Content);
+                    }
+                    else if (channel is not null)
+                    {
+                        await account.DeleteMessage(channel, message);
 
-                    await Task.Delay(random.Next(options.MinDelay, options.MaxDelay));
-                }
-            } while (search.TotalResults > 0);
+                        deletedAmount++;
+                        deletedMessageCount++;
 
-            return null;
-        }
-        private async Task<int?> DeleteFromList(Channel channel)
-        {
-            Log.Information("Started {DeleteOrCount} messages from {Channel}", Util.DeleteOrCount(options.DryRun), channel);
-
-            Search search;
-            int? totalAmount = null;
-            int deletedAmount = 0;
-
-            do
-            {
-                search = await account.SearchMessages(channel, account.User, sortOrder: options.SortOrder);
-
-                if (options.DryRun)
-                {
-                    return search.TotalResults;
-                }
-
-                if (totalAmount == null)
-                {
-                    totalAmount = search.TotalResults;
-                }
-
-                foreach (Message message in search.Messages)
-                {
-                    await account.DeleteMessage(channel, message);
-                    deletedAmount++;
-
-                    Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Channel}: {MessageContent}",
-                        deletedAmount, totalAmount, message.Author, channel, message.Content);
+                        Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Channel}: {MessageContent}",
+                            deletedAmount, totalAmount, message.Author, channel, message.Content);
+                    }
 
                     await Task.Delay(random.Next(options.MinDelay, options.MaxDelay));
                 }
@@ -185,6 +185,8 @@ namespace Delete
                 {
                     dryRunCount += count.Value;
                 }
+
+                await Task.Delay(1_000);
             }
 
             foreach (Channel channel in channelList)
@@ -196,7 +198,7 @@ namespace Delete
                     dryRunCount += count.Value;
                 }
 
-                await Task.Delay(random.Next(options.MinDelay, options.MaxDelay));
+                await Task.Delay(1_000);
             }
 
             if (options.DryRun)

@@ -5,7 +5,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Authors>ramadan8</Authors>
     <Description>Automates deletion of messages from the Discord instant messaging app.</Description>
     <PackageProjectUrl>https://github.com/ramadan8/Delete</PackageProjectUrl>
