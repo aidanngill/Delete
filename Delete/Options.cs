@@ -27,8 +27,8 @@ namespace Delete
         public int MinDelay { get; set; }
         [Option("max-delay", Required = false, HelpText = "Maximum time to wait after deleting a message before continuing", Default = 10_000)]
         public int MaxDelay { get; set; }
-        [Option('d', "dry-run", Required = false, HelpText = "Counts up how many messages will be deleted without actually deleting anything", Default = false)]
-        public bool DryRun { get; set; }
+        [Option('d', "is-dry-run", Required = false, HelpText = "Counts up how many messages will be deleted without actually deleting anything", Default = false)]
+        public bool IsDryRun { get; set; }
         [Option('o', "order", Required = false, HelpText = "Order to delete messages in, can be either 'asc' or 'desc'.", Default = "asc")]
         public string SortOrder { get; set; }
     }

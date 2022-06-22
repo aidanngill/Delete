@@ -22,10 +22,12 @@ namespace Delete
 
             Console.CancelKeyPress += delegate
             {
-                if (script.deletedMessageCount > 0)
+                if (script.DeletedMessageCount > 0)
                 {
-                    Log.Information("Successfully deleted {Amount} messages", script.deletedMessageCount);
+                    Log.Information("Successfully deleted {Amount} messages", script.DeletedMessageCount);
                 }
+
+                Log.CloseAndFlush();
             };
 
             try
@@ -34,6 +36,11 @@ namespace Delete
             }
             finally
             {
+                if (script.DeletedMessageCount > 0)
+                {
+                    Log.Information("Successfully deleted {Amount} messages", script.DeletedMessageCount);
+                }
+
                 Log.CloseAndFlush();
             }
         }

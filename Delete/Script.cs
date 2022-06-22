@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using Delete.Api;
+using Delete.Api.Request;
 using Delete.Api.Response;
 using Serilog;
 
@@ -7,36 +8,39 @@ namespace Delete
 {
     internal class Script
     {
-        private Account account;
-        private BaseOptions options;
-        private readonly List<Channel> channelList = new();
-        private readonly List<Guild> guildList = new();
-        private readonly Random random = new();
-        private int dryRunCount = 0;
-        public int deletedMessageCount = 0;
+        private Account Account;
+        private BaseOptions Options;
+        private SearchOptions SearchOptions;
+        private readonly List<Channel> ChannelList = new();
+        private readonly List<Guild> GuildList = new();
+        public int DeletedMessageCount { get; private set; }
+        public Script()
+        {
+            DeletedMessageCount = 0;
+        }
         private async Task RunAllGuildsOption()
         {
-            foreach (var guild in await account.GetGuildsAsync())
+            foreach (var guild in await Account.GetGuildsAsync())
             {
-                guildList.Add(guild);
+                GuildList.Add(guild);
             }
         }
         private async Task RunAllUsersOption()
         {
-            foreach (var channel in await account.GetUserChannels())
+            foreach (var channel in await Account.GetUserChannels())
             {
-                channelList.Add(channel);
+                ChannelList.Add(channel);
             }
         }
         private async Task RunAllBlockedOption()
         {
-            foreach (var relationship in await account.GetRelationshipsAsync(RelationshipType.BLOCKED))
+            foreach (var relationship in await Account.GetRelationshipsAsync(RelationshipType.BLOCKED))
             {
-                Channel? maybeChannel = await account.GetChannelFromUser(relationship.User);
+                Channel? maybeChannel = await Account.GetChannelFromUser(relationship.User);
 
                 if (maybeChannel != null)
                 {
-                    channelList.Add(maybeChannel);
+                    ChannelList.Add(maybeChannel);
                 }
             }
         }
@@ -47,7 +51,8 @@ namespace Delete
         }
         private async Task<int> RunAllOptions(AllOptions opts)
         {
-            Log.Information("Started {DeleteOrCount} all messages with type '{Choice}'", Util.DeleteOrCount(options.DryRun), opts.Choice);
+            Log.Information("Started {DeleteOrCount} all messages with type '{Choice}'",
+                Util.DeleteOrCount(Options.IsDryRun), opts.Choice);
 
             switch (opts.Choice.Trim().ToLower())
             {
@@ -63,7 +68,7 @@ namespace Delete
         {
             foreach (string guild in opts.Guilds)
             {
-                guildList.Add(await account.GetGuildAsync(guild));
+                GuildList.Add(await Account.GetGuildAsync(guild));
             }
 
             return 0;
@@ -72,45 +77,23 @@ namespace Delete
         {
             foreach (string channel in opts.Channels)
             {
-                channelList.Add(await account.GetChannelAsync(channel));
+                ChannelList.Add(await Account.GetChannelAsync(channel));
             }
 
             return 0;
         }
-        private async Task<int?> DeleteFromList<T>(T value)
+        private async Task<int?> DeleteFromList(Func<Task<Search>> lambdaProvideMessages, Guild? guild = null)
         {
-            Log.Information("Started {DeleteOrCount} messages from {GuildOrChannel}", Util.DeleteOrCount(options.DryRun), value);
-
             Search search;
 
             int? totalAmount = null;
             int deletedAmount = 0;
 
-            if (value is not Channel && value is not Guild)
-            {
-                throw new Exception("Invalid type was provided to the list");
-            }
-
-            Channel channel = value as Channel;
-            Guild guild = value as Guild;
-
-            if (channel is null && guild is null)
-            {
-                throw new Exception("Invalid type was provided to the list");
-            }
-
             do
             {
-                if (guild is not null)
-                {
-                    search = await account.SearchMessages(guild, account.User, sortOrder: options.SortOrder);
-                }
-                else
-                {
-                    search = await account.SearchMessages(channel, account.User, sortOrder: options.SortOrder);
-                }
+                search = await lambdaProvideMessages();
 
-                if (options.DryRun)
+                if (Options.IsDryRun)
                 {
                     return search.TotalResults;
                 }
@@ -122,47 +105,56 @@ namespace Delete
 
                 foreach (Message message in search.Messages)
                 {
-                    if (guild is not null)
+                    Channel channel = await Account.GetChannelAsync(message.ChannelID);
+                    await Account.DeleteMessage(channel, message);
+
+                    deletedAmount++;
+                    DeletedMessageCount++;
+
+                    if (guild != null)
                     {
-                        channel = await account.GetChannelAsync(message.ChannelID);
-                        await account.DeleteMessage(channel, message);
-
-                        deletedAmount++;
-                        deletedMessageCount++;
-
                         Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Guild} ({Channel}): {MessageContent}",
                             deletedAmount, totalAmount, message.Author, guild, channel, message.Content);
                     }
-                    else if (channel is not null)
+                    else
                     {
-                        await account.DeleteMessage(channel, message);
-
-                        deletedAmount++;
-                        deletedMessageCount++;
-
                         Log.Information("[{Deleted}/{Total}] {MessageAuthor} to {Channel}: {MessageContent}",
                             deletedAmount, totalAmount, message.Author, channel, message.Content);
                     }
 
-                    await Task.Delay(random.Next(options.MinDelay, options.MaxDelay));
+                    await Util.WaitRandomTime(Options.MinDelay, Options.MaxDelay);
                 }
             } while (search.TotalResults > 0);
 
             return null;
         }
+        private async Task<int?> DeleteFromList(Guild guild)
+        {
+            Log.Information("Started {DeleteOrCount} messages from {Guild}",
+                Util.DeleteOrCount(Options.IsDryRun), guild);
+
+            return await DeleteFromList(async () => await Account.SearchMessages(guild, SearchOptions), guild);
+        }
+        private async Task<int?> DeleteFromList(Channel channel)
+        {
+            Log.Information("Started {DeleteOrCount} messages from {Channel}",
+                Util.DeleteOrCount(Options.IsDryRun), channel);
+
+            return await DeleteFromList(async () => await Account.SearchMessages(channel, SearchOptions));
+        }
         public async Task Run(string[] args)
         {
-            options = Parser.Default.ParseArguments<BaseOptions>(args).Value;
+            Options = Parser.Default.ParseArguments<BaseOptions>(args).Value;
 
-            if (options == default)
+            if (Options == default)
             {
                 return;
             }
 
             try
             {
-                account = await Account.CreateAsync(options.Token);
-                Log.Information("Successfully logged in as {User}", account.User);
+                Account = await Account.CreateAsync(Options.Token);
+                Log.Information("Successfully logged in as {User}", Account.User);
             }
             catch (HttpRequestException ex)
             {
@@ -170,18 +162,29 @@ namespace Delete
                 return;
             }
 
-            await Parser.Default.ParseArguments<AllOptions, GuildOptions, ChannelOptions>(args).MapResult(
-                (AllOptions o) => RunAllOptions(o),
-                (GuildOptions o) => RunGuildOptions(o),
-                (ChannelOptions o) => RunChannelOptions(o),
-                errs => Task.FromResult(0)
-            );
+            await Parser
+                .Default
+                .ParseArguments<AllOptions, GuildOptions, ChannelOptions>(args)
+                .MapResult(
+                    (AllOptions o) => RunAllOptions(o),
+                    (GuildOptions o) => RunGuildOptions(o),
+                    (ChannelOptions o) => RunChannelOptions(o),
+                    errs => Task.FromResult(0)
+                );
 
-            foreach (Guild guild in guildList)
+            SearchOptions = new()
+            {
+                Author = Account.User,
+                SortOrder = Options.SortOrder
+            };
+
+            int dryRunCount = 0;
+
+            foreach (Guild guild in GuildList)
             {
                 int? count = await DeleteFromList(guild);
 
-                if (options.DryRun)
+                if (Options.IsDryRun)
                 {
                     dryRunCount += count.Value;
                 }
@@ -189,11 +192,11 @@ namespace Delete
                 await Task.Delay(1_000);
             }
 
-            foreach (Channel channel in channelList)
+            foreach (Channel channel in ChannelList)
             {
                 int? count = await DeleteFromList(channel);
 
-                if (options.DryRun)
+                if (Options.IsDryRun)
                 {
                     dryRunCount += count.Value;
                 }
@@ -201,7 +204,7 @@ namespace Delete
                 await Task.Delay(1_000);
             }
 
-            if (options.DryRun)
+            if (Options.IsDryRun)
             {
                 Log.Information("{Integer} messages would be deleted", dryRunCount);
             }

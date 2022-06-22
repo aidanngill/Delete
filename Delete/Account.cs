@@ -1,4 +1,5 @@
 ﻿using Delete.Api;
+using Delete.Api.Request;
 using Newtonsoft.Json;
 using Serilog;
 using System.Net.Http.Headers;
@@ -87,86 +88,20 @@ namespace Delete
         {
             return await GetChannelsAsync(guild.ID);
         }
-        public async Task<Api.Response.Search> SearchMessages(
-            string mode,
-            string modeID,
-            User? author = null,
-            string? content = null,
-            int? minID = null,
-            int? maxID = null,
-            string? has = null,
-            bool? pinned = null,
-            string sortBy = "timestamp",
-            string sortOrder = "desc"
-        )
+        public async Task<Api.Response.Search> SearchMessages( string mode, string modeID, SearchOptions searchOptions)
         {
-            var query = HttpUtility.ParseQueryString(string.Empty);
-
-            query["sort_by"] = sortBy;
-            query["sort_order"] = sortOrder;
-
-            if (author != null)
-            {
-                query["author_id"] = author.ID;
-            }
-
-            if (content != null)
-            {
-                query["content"] = content;
-            }
-
-            if (minID != null)
-            {
-                query["min_id"] = minID.ToString();
-            }
-
-            if (maxID != null)
-            {
-                query["max_id"] = maxID.ToString();
-            }
-
-            if (has != null)
-            {
-                query["has"] = has;
-            }
-
-            if (pinned != null)
-            {
-                query["pinned"] = pinned.ToString();
-            }
-
-            var res = await Http.GetAsync($"/api/v9/{mode}/{modeID}/messages/search?{query}");
+            var res = await Http.GetAsync($"/api/v9/{mode}/{modeID}/messages/search?{searchOptions}");
             res.EnsureSuccessStatusCode();
 
             return JsonConvert.DeserializeObject<Api.Response.Search>(await res.Content.ReadAsStringAsync());
         }
-        public async Task<Api.Response.Search> SearchMessages(
-            Guild guild,
-            User? author = null,
-            string? content = null,
-            int? minID = null,
-            int? maxID = null,
-            string? has = null,
-            bool? pinned = null,
-            string sortBy = "timestamp",
-            string sortOrder = "desc"
-        )
+        public async Task<Api.Response.Search> SearchMessages(Guild guild, SearchOptions searchOptions)
         {
-            return await SearchMessages("guilds", guild.ID, author, content, minID, maxID, has, pinned, sortBy, sortOrder);
+            return await SearchMessages("guilds", guild.ID, searchOptions);
         }
-        public async Task<Api.Response.Search> SearchMessages(
-            Channel channel,
-            User? author = null,
-            string? content = null,
-            int? minID = null,
-            int? maxID = null,
-            string? has = null,
-            bool? pinned = null,
-            string sortBy = "timestamp",
-            string sortOrder = "desc"
-        )
+        public async Task<Api.Response.Search> SearchMessages(Channel channel, SearchOptions searchOptions)
         {
-            return await SearchMessages("channels", channel.ID, author, content, minID, maxID, has, pinned, sortBy, sortOrder);
+            return await SearchMessages("channels", channel.ID, searchOptions);
         }
         public async Task<List<Channel>> GetUserChannels()
         {
