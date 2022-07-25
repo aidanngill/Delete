@@ -1,4 +1,6 @@
-﻿namespace Delete.Api
+﻿using Newtonsoft.Json;
+
+namespace Delete.Api
 {
     internal enum MessageType
     {
@@ -28,11 +30,17 @@
     }
     internal class Message
     {
+        [JsonProperty("id")]
         public string ID { get; set; }
+        [JsonProperty("channel_id")]
         public string ChannelID { get; set; }
+        [JsonProperty("type")]
         public MessageType Type { get; set; }
+        [JsonProperty("content")]
         public string Content { get; set; }
+        [JsonProperty("author")]
         public User Author { get; set; }
+        [JsonProperty("timestamp")]
         public string Timestamp { get; set; }
         public override string ToString()
         {
